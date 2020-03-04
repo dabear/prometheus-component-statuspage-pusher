@@ -24,12 +24,15 @@ Syntax:
 ```
 somestatus:
   componentID: prometheus-expression
-  
+  componentID: promethues-expression
+somestatus:
+  componentID: prometheus-expression
+  componentID: promethues-expression  
 ```
 
 The prometheus-expression needs to return a single element vector, like:
 ```
 abcdef: avg(up{job="web"})
 ```
-Values above 100 are considered as "partial outage"
-Values below 100 are considered as "operational"
+componentID refers to a component's ID as defined in your statuspage.io management interface
+somestatus are placeholders and refers to statuspage.io componentstatus, e.g. one of "operational","under_maintenance", "degraded_performance", "partial_outage", "major_outage" or ""
