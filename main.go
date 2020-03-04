@@ -10,7 +10,6 @@ import (
 	"net/url"
 	"os"
 	"path"
-	"strconv"
 	"strings"
 	"time"
 
@@ -32,7 +31,7 @@ var (
 	statusPageID    = flag.String("si", "", "Statuspage page ID")
 	queryConfigFile = flag.String("c", "queries.yaml", "Query config file")
 	metricInterval  = flag.Duration("i", 30*time.Second, "Metric push interval")
-
+	debugMode = flag.Bool("debug", false, "run in debug mode")
 	logger     = log.With(log.NewLogfmtLogger(log.NewSyncWriter(os.Stderr)), "caller", log.DefaultCaller)
 	httpClient = &http.Client{}
 )
@@ -61,7 +60,7 @@ func main() {
 	for {
 		for metricID, query := range qConfig {
 			ts := time.Now()
-			resp, err := api.Query(context.Background(), query, ts)
+			resp,_, err := api.Query(context.Background(), query, ts)
 			if err != nil {
 				level.Error(logger).Log("msg", "Couldn't query Prometheus", "error", err.Error())
 				continue
@@ -73,7 +72,7 @@ func main() {
 			}
 
 			level.Info(logger).Log("metricID", metricID, "resp", vec[0].Value)
-			if err := sendStatusPage(ts, metricID, float64(vec[0].Value)); err != nil {
+			if err := sendComponentStatus(ts, metricID, float64(vec[0].Value)); err != nil {
 				level.Error(logger).Log("msg", "Couldn't send metric to Statuspage", "error", err.Error())
 				continue
 			}
@@ -82,15 +81,24 @@ func main() {
 	}
 }
 
-func sendStatusPage(ts time.Time, metricID string, value float64) error {
-	values := url.Values{
-		"data[timestamp]": []string{strconv.FormatInt(ts.Unix(), 10)},
-		"data[value]":     []string{strconv.FormatFloat(value, 'f', -1, 64)},
+func sendComponentStatus(ts time.Time, componentID string, value float64) error {
+	status := "operational"
+	if value > 100 {
+		status = "partial_outage"
 	}
-	url := *statusPageURL + path.Join("/v1", "pages", *statusPageID, "metrics", metricID, "data.json")
-	req, err := http.NewRequest("POST", url, strings.NewReader(values.Encode()))
+	values := url.Values{
+		"component[status]": []string{status},
+
+	}
+	url := *statusPageURL + path.Join("/v1", "pages", *statusPageID, "components", componentID+ ".json")
+	req, err := http.NewRequest("PATCH", url, strings.NewReader(values.Encode()))
 	if err != nil {
 		return err
+	}
+	if *debugMode == true {
+		fmt.Printf("statuspagetoken: %s\n", *statusPageToken)
+		fmt.Printf("url: %s\n", url)
+		fmt.Printf("values: %s\n", values.Encode())
 	}
 	req.Header.Set("Authorization", "OAuth "+*statusPageToken)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -105,6 +113,12 @@ func sendStatusPage(ts time.Time, metricID string, value float64) error {
 			return fmt.Errorf("Empty API Error")
 		}
 		return errors.New("API Error: " + string(respStr))
+	} else {
+		respStr, err := ioutil.ReadAll(resp.Body)
+		if err != nil{
+			fmt.Printf("Got success: %s", respStr)
+		}
+
 	}
 	return nil
 }
