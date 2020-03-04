@@ -58,7 +58,7 @@ func main() {
 	api := prometheus.NewAPI(client)
 
 	for {
-		for metricID, query := range qConfig {
+		for componentID, query := range qConfig {
 			ts := time.Now()
 			resp,_, err := api.Query(context.Background(), query, ts)
 			if err != nil {
@@ -71,8 +71,8 @@ func main() {
 				continue
 			}
 
-			level.Info(logger).Log("metricID", metricID, "resp", vec[0].Value)
-			if err := sendComponentStatus(ts, metricID, float64(vec[0].Value)); err != nil {
+			level.Info(logger).Log("metricID", componentID, "resp", vec[0].Value)
+			if err := sendComponentStatus(ts, componentID, float64(vec[0].Value)); err != nil {
 				level.Error(logger).Log("msg", "Couldn't send metric to Statuspage", "error", err.Error())
 				continue
 			}
@@ -115,7 +115,7 @@ func sendComponentStatus(ts time.Time, componentID string, value float64) error 
 		return errors.New("API Error: " + string(respStr))
 	} else {
 		respStr, err := ioutil.ReadAll(resp.Body)
-		if err != nil{
+		if err == nil{
 			fmt.Printf("Got success: %s", respStr)
 		}
 
