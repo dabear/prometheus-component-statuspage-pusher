@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ghodss/yaml"
+	"gopkg.in/yaml.v2"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 
@@ -22,7 +22,7 @@ import (
 	"github.com/prometheus/common/model"
 )
 
-type queryConfig map[string]string
+
 
 var (
 	prometheusURL   = flag.String("pu", "http://localhost:9090", "URL of Prometheus server")
@@ -42,14 +42,12 @@ func fatal(fields ...interface{}) {
 }
 func main() {
 	flag.Parse()
-	qConfig := queryConfig{}
+
 	qcd, err := ioutil.ReadFile(*queryConfigFile)
 	if err != nil {
 		fatal("msg", "Couldn't read config file", "error", err.Error())
 	}
-	if err := yaml.Unmarshal(qcd, &qConfig); err != nil {
-		fatal("msg", "Couldn't parse config file", "error", err.Error())
-	}
+
 
 	client, err := api.NewClient(api.Config{Address: *prometheusURL})
 	if err != nil {
@@ -57,35 +55,67 @@ func main() {
 	}
 	api := prometheus.NewAPI(client)
 
+	m := make(map[interface{}]map[interface{}]interface{})
+
+  err2 :=yaml.Unmarshal([]byte(qcd), &m)
+	if err2 != nil {
+    fatal("error: %v", err2)
+  }
+	if *debugMode == true {
+		fmt.Printf("%v\n", m)
+	}
+
+
 	for {
-		for componentID, query := range qConfig {
-			ts := time.Now()
-			resp,_, err := api.Query(context.Background(), query, ts)
-			if err != nil {
-				level.Error(logger).Log("msg", "Couldn't query Prometheus", "error", err.Error())
-				continue
-			}
-			vec := resp.(model.Vector)
-			if l := vec.Len(); l != 1 {
-				level.Error(logger).Log("msg", "Expected query to return single value", "samples", l)
-				continue
+
+		for componentstatus, _ := range m {
+		  //fmt.Printf("key[%s] value[%s]\n", componentstatus,entries)
+			for componentID, query := range m[componentstatus] {
+				if *debugMode == true {
+					fmt.Printf("ComponentID: %s\nComponentstatus: %s\n", componentID, componentstatus)
+					fmt.Printf("Statusquery: %s\n", query)
+				}
+
+
+
+				ts := time.Now()
+ 				resp,_, err := api.Query(context.Background(), query.(string), ts)
+ 				if err != nil {
+ 					level.Error(logger).Log("msg", "Couldn't query Prometheus", "error", err.Error())
+ 					continue
+ 				}
+ 				vec := resp.(model.Vector)
+				l := vec.Len()
+ 				if l == 0 {
+					fmt.Printf("Skipped sending status %s for component %s\n", componentstatus, componentID.(string))
+					if *debugMode == true {
+						fmt.Printf("Component query: %s", query.(string))
+					}
+					continue
+				} else if l > 1{
+					level.Error(logger).Log("msg", "Expected query to return single value", "samples", l)
+					continue
+				}
+
+ 				level.Info(logger).Log("metricID", componentID, "resp", vec[0].Value)
+ 				if err := sendComponentStatus(ts, componentID.(string), componentstatus.(string)	, float64(vec[0].Value)); err != nil {
+ 					level.Error(logger).Log("msg", "Couldn't send metric to Statuspage", "error", err.Error())
+ 					continue
+ 				}
 			}
 
-			level.Info(logger).Log("metricID", componentID, "resp", vec[0].Value)
-			if err := sendComponentStatus(ts, componentID, float64(vec[0].Value)); err != nil {
-				level.Error(logger).Log("msg", "Couldn't send metric to Statuspage", "error", err.Error())
-				continue
-			}
-		}
-		time.Sleep(*metricInterval)
-	}
+		 }
+
+		 if *debugMode == true {
+			 fmt.Printf("\n\n")
+		 }
+		 time.Sleep(*metricInterval)
+   }
+
 }
 
-func sendComponentStatus(ts time.Time, componentID string, value float64) error {
-	status := "operational"
-	if value > 100 {
-		status = "partial_outage"
-	}
+func sendComponentStatus(ts time.Time, componentID string, status string, value float64) error {
+
 	values := url.Values{
 		"component[status]": []string{status},
 
@@ -98,7 +128,7 @@ func sendComponentStatus(ts time.Time, componentID string, value float64) error 
 	if *debugMode == true {
 		fmt.Printf("statuspagetoken: %s\n", *statusPageToken)
 		fmt.Printf("url: %s\n", url)
-		fmt.Printf("values: %s\n", values.Encode())
+		fmt.Printf("postparams: %s\n", values.Encode())
 	}
 	req.Header.Set("Authorization", "OAuth "+*statusPageToken)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -116,7 +146,12 @@ func sendComponentStatus(ts time.Time, componentID string, value float64) error 
 	} else {
 		respStr, err := ioutil.ReadAll(resp.Body)
 		if err == nil{
-			fmt.Printf("Got success: %s", respStr)
+			if *debugMode == true {
+				fmt.Printf("Got response:  %s\n", respStr)
+			}
+			fmt.Printf("Setting status %s for component %s\n", status, componentID)
+
+
 		}
 
 	}

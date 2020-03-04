@@ -1,2 +1,0 @@
-9qxvx2r87yfw: |
-  (alertmanager_alerts{instance="demo.robustperception.io:9093",job="alertmanager",state="active"} > 3 ) * 100

@@ -1,3 +1,4 @@
 prometheus-statuspage-pusher
 *.swp
 vendor/
+main

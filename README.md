@@ -22,7 +22,9 @@ Usage of ./prometheus-statuspage-pusher:
 ## Config:
 Syntax:
 ```
-componentID: prometheus-expression
+somestatus:
+  componentID: prometheus-expression
+  
 ```
 
 The prometheus-expression needs to return a single element vector, like:

@@ -1,0 +1,8 @@
+operational:
+  9qxvx2r87yfw: |
+    alertmanager_alerts{instance="demo.robustperception.io:9093",job="alertmanager",state="active"} < 100
+  w3msywspxjvg: |
+    alertmanager_alerts{instance="demo.robustperception.io:9093",job="alertmanager",state="active"} < 100
+partial_outage:
+  9qxvx2r87yfw: |
+    alertmanager_alerts{instance="demo.robustperception.io:9093",job="alertmanager",state="active"} > 100
